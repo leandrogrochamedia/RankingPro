@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ranking Pro — QR</title>
+  <link rel="stylesheet" href="../css/ranking-pro.css">
+</head>
+<body>
+  <div class="rp-container">
+    <div class="rp-card" id="app">
+      <p class="rp-logo">Ranking Pro</p>
+      <div id="state-loading" class="rp-loading">Validando QR…</div>
+      <div id="state-error" class="rp-hidden">
+        <div class="rp-error-icon">⚠️</div>
+        <h1 class="rp-error-title" id="error-title">QR inválido</h1>
+        <p class="rp-message" id="error-message"></p>
+      </div>
+    </div>
+  </div>
+
+  <script src="../config.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/qr-service.js"></script>
+  <script>
+    (async function () {
+      const loading = document.getElementById('state-loading');
+      const errorBlock = document.getElementById('state-error');
+      const errorTitle = document.getElementById('error-title');
+      const errorMessage = document.getElementById('error-message');
+
+      function showError(title, message) {
+        loading.classList.add('rp-hidden');
+        errorBlock.classList.remove('rp-hidden');
+        errorTitle.textContent = title;
+        errorMessage.textContent = message || '';
+      }
+
+      const token = RankingProQR.getTokenFromUrl();
+      if (!token) {
+        showError('QR inválido', 'Este link não contém um código válido.');
+        return;
+      }
+
+      try {
+        const result = await RankingProQR.validateToken(token);
+
+        if (result.status === 'valid') {
+          window.location.replace(RankingProQR.buildAvaliarUrl(token));
+          return;
+        }
+
+        if (result.status === 'expired') {
+          showError(
+            'QR expirado',
+            'Este QR expirou. Peça um novo ao profissional.'
+          );
+          return;
+        }
+
+        if (result.status === 'used') {
+          showError(
+            'Avaliação já registrada',
+            'Esta avaliação já foi registrada.'
+          );
+          return;
+        }
+
+        showError('QR inválido', 'Este link não é válido ou já expirou.');
+      } catch (err) {
+        console.error(err);
+        showError('Erro', 'Não foi possível validar o QR. Tente novamente.');
+      }
+    })();
+  </script>
+</body>
+</html>

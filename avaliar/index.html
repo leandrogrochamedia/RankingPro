@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ranking Pro — Avaliar</title>
+  <link rel="stylesheet" href="../css/ranking-pro.css">
+</head>
+<body>
+  <div class="rp-container">
+    <div class="rp-card" id="app">
+      <p class="rp-logo">Ranking Pro</p>
+
+      <div id="state-loading" class="rp-loading">Carregando…</div>
+
+      <div id="state-error" class="rp-hidden">
+        <div class="rp-error-icon">⚠️</div>
+        <h1 class="rp-error-title" id="error-title">QR inválido</h1>
+        <p class="rp-message" id="error-message"></p>
+      </div>
+
+      <div id="state-form" class="rp-hidden">
+        <h1 class="rp-title">Como foi o atendimento?</h1>
+        <p class="rp-prof-name" id="prof-name"></p>
+        <p class="rp-prof-specialty" id="prof-specialty"></p>
+
+        <div class="rp-stars-input" id="stars-input" role="group" aria-label="Nota de 1 a 5">
+          <button type="button" data-rating="1" aria-label="1 estrela">★</button>
+          <button type="button" data-rating="2" aria-label="2 estrelas">★</button>
+          <button type="button" data-rating="3" aria-label="3 estrelas">★</button>
+          <button type="button" data-rating="4" aria-label="4 estrelas">★</button>
+          <button type="button" data-rating="5" aria-label="5 estrelas">★</button>
+        </div>
+
+        <label class="rp-label" for="comment">Comentário (opcional)</label>
+        <textarea
+          id="comment"
+          class="rp-textarea"
+          maxlength="500"
+          placeholder="Conte como foi sua experiência…"
+          rows="4"
+        ></textarea>
+        <p class="rp-char-count"><span id="char-count">0</span>/500</p>
+
+        <button type="button" class="rp-btn" id="btn-submit" disabled>Enviar avaliação</button>
+        <p class="rp-message" id="form-error" style="color:var(--rp-error);margin-top:16px;"></p>
+      </div>
+
+      <div id="state-success" class="rp-hidden">
+        <div class="rp-success-icon">✓</div>
+        <h1 class="rp-success-title">Obrigado!</h1>
+        <p class="rp-message">Sua avaliação verificada foi registrada.</p>
+        <a class="rp-btn rp-link" id="profile-link" href="#" style="text-align:center;text-decoration:none;display:block;">Ver perfil do profissional</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="../config.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/qr-service.js"></script>
+  <script src="../js/reviews-service.js"></script>
+  <script>
+    (async function () {
+      const loading = document.getElementById('state-loading');
+      const errorBlock = document.getElementById('state-error');
+      const formBlock = document.getElementById('state-form');
+      const successBlock = document.getElementById('state-success');
+
+      const errorTitle = document.getElementById('error-title');
+      const errorMessage = document.getElementById('error-message');
+      const profName = document.getElementById('prof-name');
+      const profSpecialty = document.getElementById('prof-specialty');
+      const starsInput = document.getElementById('stars-input');
+      const commentEl = document.getElementById('comment');
+      const charCount = document.getElementById('char-count');
+      const btnSubmit = document.getElementById('btn-submit');
+      const formError = document.getElementById('form-error');
+      const profileLink = document.getElementById('profile-link');
+
+      let selectedRating = 0;
+      let sessionData = null;
+      const token = RankingProQR.getTokenFromUrl();
+
+      function hideAll() {
+        loading.classList.add('rp-hidden');
+        errorBlock.classList.add('rp-hidden');
+        formBlock.classList.add('rp-hidden');
+        successBlock.classList.add('rp-hidden');
+      }
+
+      function showError(title, message) {
+        hideAll();
+        errorBlock.classList.remove('rp-hidden');
+        errorTitle.textContent = title;
+        errorMessage.textContent = message || '';
+      }
+
+      function showForm(data) {
+        hideAll();
+        formBlock.classList.remove('rp-hidden');
+        profName.textContent = data.professional_name || '';
+        profSpecialty.textContent = data.professional_specialty || '';
+        profileLink.href = RankingProQR.buildProfileUrl(data.professional_slug);
+      }
+
+      function showSuccess(slug) {
+        hideAll();
+        successBlock.classList.remove('rp-hidden');
+        profileLink.href = RankingProQR.buildProfileUrl(slug);
+      }
+
+      function updateStars() {
+        starsInput.querySelectorAll('button').forEach(function (btn) {
+          const r = Number(btn.dataset.rating);
+          btn.classList.toggle('active', r <= selectedRating);
+        });
+        btnSubmit.disabled = selectedRating < 1;
+      }
+
+      starsInput.addEventListener('click', function (e) {
+        const btn = e.target.closest('button[data-rating]');
+        if (!btn) return;
+        selectedRating = Number(btn.dataset.rating);
+        updateStars();
+      });
+
+      commentEl.addEventListener('input', function () {
+        charCount.textContent = String(commentEl.value.length);
+      });
+
+      if (!token) {
+        showError('QR inválido', 'Este link não contém um código válido.');
+        return;
+      }
+
+      try {
+        const result = await RankingProQR.validateToken(token);
+
+        if (result.status === 'expired') {
+          showError('QR expirado', 'Este QR expirou. Peça um novo ao profissional.');
+          return;
+        }
+
+        if (result.status === 'used') {
+          showError('Avaliação já registrada', 'Esta avaliação já foi registrada.');
+          return;
+        }
+
+        if (result.status !== 'valid') {
+          showError('QR inválido', 'Este link não é válido.');
+          return;
+        }
+
+        sessionData = result;
+        showForm(result);
+      } catch (err) {
+        console.error(err);
+        showError('Erro', 'Não foi possível carregar a avaliação.');
+      }
+
+      btnSubmit.addEventListener('click', async function () {
+        if (selectedRating < 1 || btnSubmit.disabled) return;
+
+        btnSubmit.disabled = true;
+        formError.textContent = '';
+
+        try {
+          const result = await RankingProReviews.submitQrReview(
+            token,
+            selectedRating,
+            commentEl.value.trim()
+          );
+
+          if (result.status === 'success') {
+            showSuccess(result.professional_slug);
+            return;
+          }
+
+          if (result.status === 'used') {
+            showError('Avaliação já registrada', 'Esta avaliação já foi registrada.');
+            return;
+          }
+
+          if (result.status === 'expired') {
+            showError('QR expirado', 'Este QR expirou. Peça um novo ao profissional.');
+            return;
+          }
+
+          if (result.status === 'invalid') {
+            showError('QR inválido', 'Este link não é mais válido.');
+            return;
+          }
+
+          formError.textContent = result.message || 'Não foi possível enviar. Tente novamente.';
+          btnSubmit.disabled = false;
+        } catch (err) {
+          console.error(err);
+          formError.textContent = 'Erro ao enviar. Verifique sua conexão.';
+          btnSubmit.disabled = false;
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

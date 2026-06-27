@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ranking Pro — Perfil</title>
+  <link rel="stylesheet" href="../css/ranking-pro.css">
+</head>
+<body>
+  <div class="rp-container">
+    <div class="rp-card" id="app">
+      <p class="rp-logo">Ranking Pro</p>
+
+      <div id="state-loading" class="rp-loading">Carregando perfil…</div>
+
+      <div id="state-error" class="rp-hidden">
+        <div class="rp-error-icon">⚠️</div>
+        <h1 class="rp-error-title">Perfil não encontrado</h1>
+        <p class="rp-message">Este profissional não existe ou o link está incorreto.</p>
+      </div>
+
+      <div id="state-profile" class="rp-hidden">
+        <h1 class="rp-prof-name" id="prof-name"></h1>
+        <p class="rp-prof-specialty" id="prof-specialty"></p>
+
+        <p class="rp-rating-big" id="rating-big">0.0</p>
+        <p class="rp-rating-meta" id="rating-meta">0 avaliações</p>
+
+        <ul class="rp-reviews" id="reviews-list"></ul>
+        <p class="rp-empty rp-hidden" id="reviews-empty">Ainda sem avaliações verificadas</p>
+      </div>
+    </div>
+  </div>
+
+  <script src="../config.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/profile-service.js"></script>
+  <script>
+    (async function () {
+      const loading = document.getElementById('state-loading');
+      const errorBlock = document.getElementById('state-error');
+      const profileBlock = document.getElementById('state-profile');
+      const profName = document.getElementById('prof-name');
+      const profSpecialty = document.getElementById('prof-specialty');
+      const ratingBig = document.getElementById('rating-big');
+      const ratingMeta = document.getElementById('rating-meta');
+      const reviewsList = document.getElementById('reviews-list');
+      const reviewsEmpty = document.getElementById('reviews-empty');
+
+      const params = new URLSearchParams(window.location.search);
+      const slug = params.get('slug');
+
+      function hideAll() {
+        loading.classList.add('rp-hidden');
+        errorBlock.classList.add('rp-hidden');
+        profileBlock.classList.add('rp-hidden');
+      }
+
+      if (!slug) {
+        hideAll();
+        errorBlock.classList.remove('rp-hidden');
+        return;
+      }
+
+      try {
+        const prof = await RankingProProfile.getProfessionalBySlug(slug);
+
+        if (!prof) {
+          hideAll();
+          errorBlock.classList.remove('rp-hidden');
+          return;
+        }
+
+        const reviews = await RankingProProfile.getReviewsForProfessional(prof.id);
+
+        hideAll();
+        profileBlock.classList.remove('rp-hidden');
+
+        profName.textContent = prof.name;
+        profSpecialty.textContent = prof.specialty || '';
+        profSpecialty.style.display = prof.specialty ? 'block' : 'none';
+
+        const avg = Number(prof.average_rating) || 0;
+        ratingBig.textContent = avg.toFixed(1);
+        ratingMeta.textContent = RankingProProfile.formatRatingDisplay(avg, prof.total_reviews);
+
+        if (!reviews || reviews.length === 0) {
+          reviewsEmpty.classList.remove('rp-hidden');
+          return;
+        }
+
+        reviewsEmpty.classList.add('rp-hidden');
+        reviewsList.innerHTML = reviews.map(function (r) {
+          const stars = RankingProProfile.renderStars(r.rating);
+          const comment = r.comment
+            ? '<p class="rp-review-comment">' + escapeHtml(r.comment) + '</p>'
+            : '';
+          const date = RankingProProfile.formatRelativeDate(r.created_at);
+          const badge = r.is_verified
+            ? '<span class="rp-verified-badge">Verificada</span>'
+            : '';
+
+          return (
+            '<li class="rp-review-item">' +
+              '<div class="rp-review-stars">' + stars + badge + '</div>' +
+              comment +
+              '<p class="rp-review-date">' + escapeHtml(date) + '</p>' +
+            '</li>'
+          );
+        }).join('');
+      } catch (err) {
+        console.error(err);
+        hideAll();
+        errorBlock.classList.remove('rp-hidden');
+      }
+
+      function escapeHtml(str) {
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+    })();
+  </script>
+</body>
+</html>

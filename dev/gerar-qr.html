@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ranking Pro — Gerar QR (dev)</title>
+  <link rel="stylesheet" href="../css/ranking-pro.css">
+</head>
+<body>
+  <div class="rp-container">
+    <div class="rp-card">
+      <p class="rp-logo">Ranking Pro · Dev</p>
+      <h1 class="rp-title">Gerar QR</h1>
+      <p class="rp-subtitle">Sessão única por atendimento — válida por 2 horas</p>
+
+      <div id="state-loading" class="rp-loading">Carregando profissionais…</div>
+
+      <div id="state-form" class="rp-hidden">
+        <label class="rp-label" for="prof-select">Profissional</label>
+        <select id="prof-select" class="rp-dev-select"></select>
+
+        <button type="button" class="rp-btn" id="btn-generate">Gerar QR Code</button>
+        <p class="rp-message" id="form-error" style="color:var(--rp-error);"></p>
+      </div>
+
+      <div id="state-result" class="rp-hidden">
+        <p class="rp-prof-name" id="result-name"></p>
+        <div class="rp-qr-box" id="qr-canvas"></div>
+        <p class="rp-meta-line" id="result-expires"></p>
+
+        <div class="rp-url-box">
+          <input type="text" class="rp-url-input" id="qr-url" readonly>
+          <button type="button" class="rp-btn rp-url-copy" id="btn-copy">Copiar</button>
+        </div>
+
+        <button type="button" class="rp-btn rp-btn-secondary" id="btn-new">Gerar outro</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <script src="../config.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/qr-service.js"></script>
+  <script>
+    (async function () {
+      const loading = document.getElementById('state-loading');
+      const formBlock = document.getElementById('state-form');
+      const resultBlock = document.getElementById('state-result');
+      const profSelect = document.getElementById('prof-select');
+      const btnGenerate = document.getElementById('btn-generate');
+      const btnCopy = document.getElementById('btn-copy');
+      const btnNew = document.getElementById('btn-new');
+      const formError = document.getElementById('form-error');
+      const resultName = document.getElementById('result-name');
+      const resultExpires = document.getElementById('result-expires');
+      const qrCanvas = document.getElementById('qr-canvas');
+      const qrUrlInput = document.getElementById('qr-url');
+
+      let professionals = [];
+
+      function showForm() {
+        loading.classList.add('rp-hidden');
+        resultBlock.classList.add('rp-hidden');
+        formBlock.classList.remove('rp-hidden');
+      }
+
+      function showResult(data, url) {
+        formBlock.classList.add('rp-hidden');
+        resultBlock.classList.remove('rp-hidden');
+        resultName.textContent = data.professional_name;
+        resultExpires.textContent = 'Expira em: ' + formatDate(data.expires_at);
+        qrUrlInput.value = url;
+        qrCanvas.innerHTML = '';
+
+        if (typeof QRCode !== 'undefined') {
+          QRCode.toCanvas(url, { width: 220, margin: 2 }, function (err, canvas) {
+            if (err) {
+              qrCanvas.textContent = 'Erro ao gerar QR';
+              return;
+            }
+            qrCanvas.appendChild(canvas);
+          });
+        }
+      }
+
+      function formatDate(iso) {
+        return new Date(iso).toLocaleString('pt-BR');
+      }
+
+      try {
+        professionals = await RankingProAPI.select(
+          'professionals',
+          '?select=id,name,slug&order=name.asc'
+        );
+
+        if (!professionals.length) {
+          loading.textContent = 'Nenhum profissional encontrado. Rode o seed no Supabase.';
+          return;
+        }
+
+        profSelect.innerHTML = professionals.map(function (p) {
+          return '<option value="' + p.id + '">' + escapeHtml(p.name) + ' (@' + escapeHtml(p.slug) + ')</option>';
+        }).join('');
+
+        showForm();
+      } catch (err) {
+        console.error(err);
+        loading.textContent = 'Erro ao carregar. Verifique config.js e o Supabase.';
+      }
+
+      btnGenerate.addEventListener('click', async function () {
+        const profId = profSelect.value;
+        if (!profId) return;
+
+        btnGenerate.disabled = true;
+        formError.textContent = '';
+
+        try {
+          const result = await RankingProQR.createSession(profId, 2);
+
+          if (result.status !== 'success') {
+            formError.textContent = result.message || 'Erro ao criar sessão.';
+            btnGenerate.disabled = false;
+            return;
+          }
+
+          const url = RankingProQR.buildQrUrl(result.token);
+          showResult(result, url);
+        } catch (err) {
+          console.error(err);
+          formError.textContent = 'Erro ao gerar QR. Verifique conexão.';
+        }
+
+        btnGenerate.disabled = false;
+      });
+
+      btnCopy.addEventListener('click', async function () {
+        try {
+          await navigator.clipboard.writeText(qrUrlInput.value);
+          btnCopy.textContent = 'Copiado!';
+          setTimeout(function () { btnCopy.textContent = 'Copiar'; }, 2000);
+        } catch {
+          qrUrlInput.select();
+          document.execCommand('copy');
+        }
+      });
+
+      btnNew.addEventListener('click', function () {
+        resultBlock.classList.add('rp-hidden');
+        formBlock.classList.remove('rp-hidden');
+      });
+
+      function escapeHtml(str) {
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+    })();
+  </script>
+</body>
+</html>

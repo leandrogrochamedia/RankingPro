@@ -1,0 +1,25 @@
+[build]
+  command = "sh scripts/build-config.sh"
+  publish = "."
+
+[[redirects]]
+  from = "/qr"
+  to = "/qr/"
+  status = 301
+
+[[redirects]]
+  from = "/avaliar"
+  to = "/avaliar/"
+  status = 301
+
+[[redirects]]
+  from = "/p"
+  to = "/p/"
+  status = 301
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
