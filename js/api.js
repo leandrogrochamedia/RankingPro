@@ -1,4 +1,4 @@
-// Ranking Pro — Supabase REST client
+// Ranking Pro — Supabase REST client (Proofly)
 
 (function (global) {
   'use strict';
@@ -13,12 +13,13 @@
     return { SUPABASE_URL: url, SUPABASE_ANON_KEY: key };
   }
 
-  function baseHeaders() {
+  function baseHeaders(extra) {
     const { SUPABASE_ANON_KEY } = getConfig();
     return {
       apikey: SUPABASE_ANON_KEY,
       Authorization: 'Bearer ' + SUPABASE_ANON_KEY,
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      ...(extra || {})
     };
   }
 
@@ -27,7 +28,7 @@
     const url = SUPABASE_URL.replace(/\/$/, '') + path;
     const res = await fetch(url, {
       ...options,
-      headers: { ...baseHeaders(), ...(options.headers || {}) }
+      headers: { ...baseHeaders(options.prefer ? { Prefer: options.prefer } : {}), ...(options.headers || {}) }
     });
 
     const text = await res.text();
@@ -41,7 +42,7 @@
     }
 
     if (!res.ok) {
-      const msg = data?.message || data?.error || data?.hint || res.statusText || 'Erro na API';
+      const msg = data?.message || data?.error || data?.hint || data?.code || res.statusText || 'Erro na API';
       throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
     }
 
@@ -60,10 +61,31 @@
     return fetchRest('/rest/v1/' + table + q);
   }
 
+  async function insert(table, row) {
+    const data = await fetchRest('/rest/v1/' + table, {
+      method: 'POST',
+      prefer: 'return=representation',
+      body: JSON.stringify(row)
+    });
+    return Array.isArray(data) ? data[0] : data;
+  }
+
+  async function update(table, query, patch) {
+    const q = query.startsWith('?') ? query : '?' + query;
+    const data = await fetchRest('/rest/v1/' + table + q, {
+      method: 'PATCH',
+      prefer: 'return=representation',
+      body: JSON.stringify(patch)
+    });
+    return Array.isArray(data) ? data[0] : data;
+  }
+
   global.RankingProAPI = {
     getConfig,
     fetchRest,
     rpc,
-    select
+    select,
+    insert,
+    update
   };
 })(window);

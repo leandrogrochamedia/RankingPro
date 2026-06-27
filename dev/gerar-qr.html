@@ -2,14 +2,19 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#08080f">
   <title>Ranking Pro — Gerar QR (dev)</title>
   <link rel="stylesheet" href="../css/ranking-pro.css">
 </head>
-<body>
+<body class="rp-shell">
   <div class="rp-container">
+    <header class="rp-topbar">
+      <div class="rp-mark" aria-hidden="true">🏆</div>
+      <span class="rp-brand">Ranking Pro · Dev</span>
+    </header>
     <div class="rp-card">
-      <p class="rp-logo">Ranking Pro · Dev</p>
+      <p class="rp-logo">Gerador de sessão QR</p>
       <h1 class="rp-title">Gerar QR</h1>
       <p class="rp-subtitle">Sessão única por atendimento — válida por 2 horas</p>
 
@@ -34,6 +39,7 @@
         </div>
 
         <button type="button" class="rp-btn rp-btn-secondary" id="btn-new">Gerar outro</button>
+        <a class="rp-btn rp-btn-secondary" href="../" style="margin-top:12px;">← Início</a>
       </div>
     </div>
   </div>

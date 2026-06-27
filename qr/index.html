@@ -2,15 +2,19 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#08080f">
   <title>Ranking Pro — QR</title>
   <link rel="stylesheet" href="../css/ranking-pro.css">
 </head>
-<body>
+<body class="rp-shell">
   <div class="rp-container">
+    <header class="rp-topbar">
+      <div class="rp-mark" aria-hidden="true">🏆</div>
+      <span class="rp-brand">Ranking Pro</span>
+    </header>
     <div class="rp-card" id="app">
-      <p class="rp-logo">Ranking Pro</p>
-      <div id="state-loading" class="rp-loading">Validando QR…</div>
+      <div id="state-loading" class="rp-loading">Validando QR</div>
       <div id="state-error" class="rp-hidden">
         <div class="rp-error-icon">⚠️</div>
         <h1 class="rp-error-title" id="error-title">QR inválido</h1>

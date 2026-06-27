@@ -2,8 +2,10 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Ranking Pro</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#08080f">
+  <meta name="color-scheme" content="dark">
+  <title>Ranking Pro — Reputação verificada</title>
   <link rel="stylesheet" href="css/ranking-pro.css">
   <script>
     (function () {
@@ -15,17 +17,77 @@
     })();
   </script>
 </head>
-<body>
+<body class="rp-shell">
   <div class="rp-container">
-    <div class="rp-card">
-      <p class="rp-logo">Ranking Pro</p>
-      <h1 class="rp-title">Reputação verificada</h1>
-      <p class="rp-subtitle">Núcleo — banco Proofly, desenvolvimento local</p>
-      <a class="rp-btn rp-link" href="dev/gerar-qr.html" style="text-align:center;text-decoration:none;display:block;">Gerar QR (dev)</a>
-      <p class="rp-message" style="margin-top:16px;font-size:13px;text-align:center;">
-        Perfil público: <code>/p/?id=UUID</code> do profissional
+    <header class="rp-topbar">
+      <div class="rp-mark" aria-hidden="true">🏆</div>
+      <span class="rp-brand">Ranking Pro</span>
+    </header>
+
+    <div class="rp-card rp-card-hero">
+      <div class="rp-eyebrow-wrap">
+        <p class="rp-eyebrow">✓ Avaliação só após atendimento real</p>
+      </div>
+      <h1 class="rp-title">Reputação que o profissional leva consigo</h1>
+      <p class="rp-subtitle">Cliente escaneia o QR, avalia em segundos e a nota verificada aparece no perfil público.</p>
+
+      <div class="rp-steps">
+        <div class="rp-step">
+          <span class="rp-step-num">1</span>
+          <div class="rp-step-text">
+            <strong>QR único por atendimento</strong>
+            <span>Válido por 2 horas — impossível avaliar sem ter sido atendido.</span>
+          </div>
+        </div>
+        <div class="rp-step">
+          <span class="rp-step-num">2</span>
+          <div class="rp-step-text">
+            <strong>Nota + comentário</strong>
+            <span>Sem cadastro, sem login. Só estrelas e opinião honesta.</span>
+          </div>
+        </div>
+        <div class="rp-step">
+          <span class="rp-step-num">3</span>
+          <div class="rp-step-text">
+            <strong>Perfil público atualizado</strong>
+            <span>Média e histórico verificados para bio, WhatsApp e Instagram.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="rp-btn-stack">
+        <a class="rp-btn" href="dev/gerar-qr.html">Gerar QR de teste</a>
+        <a class="rp-btn rp-btn-secondary" id="demo-profile" href="#">Ver perfil de exemplo</a>
+      </div>
+
+      <p class="rp-footnote">
+        Dev local · banco Proofly · perfil em <code>/p/?id=UUID</code>
       </p>
     </div>
   </div>
+
+  <script src="config.js"></script>
+  <script src="js/api.js"></script>
+  <script>
+    (async function () {
+      var link = document.getElementById('demo-profile');
+      try {
+        var rows = await RankingProAPI.select(
+          'professionals',
+          '?select=id,name,avg_rating,total_reviews&order=total_reviews.desc&limit=1'
+        );
+        if (rows && rows[0]) {
+          link.href = '/p/?id=' + encodeURIComponent(rows[0].id);
+          link.textContent = 'Ver perfil: ' + rows[0].name;
+        } else {
+          link.href = 'dev/gerar-qr.html';
+          link.textContent = 'Gerar primeiro QR';
+        }
+      } catch (e) {
+        link.href = 'dev/gerar-qr.html';
+        link.textContent = 'Configurar e testar';
+      }
+    })();
+  </script>
 </body>
 </html>
