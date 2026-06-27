@@ -1,0 +1,295 @@
+# DEVTASK — Ranking Pro Shark Mode — Núcleo Semana 1–2 (Rebuild do Zero)
+**Data:** 2026-06-27
+**Prioridade:** P0 — bloqueia tudo o resto
+**Solicitante:** Supervisor Ranking Pro
+**Executor:** Magrão
+**Escopo:** SOMENTE QR → avaliação → perfil público. Nada mais.
+
+---
+
+## Contexto
+
+Backup completo e offline já feito (27/06). MVP antigo congelado em:
+`/Users/leandrogrocha/Documents/DEV/MVP Hanking PRO` — **NÃO MEXER**.
+
+Decisão final do Supervisor: **rebuild do zero** com escopo Shark congelado.
+Não copiar arquivos do MVP. Só reutilizar **conhecimento** (fluxo QR, regras de token, schema mínimo).
+
+**North Star:** infraestrutura de reputação verificada. Se o núcleo não funcionar em produção real, o resto não existe.
+
+---
+
+## Decisões do Supervisor (já aprovadas — não reabrir)
+
+| # | Decisão | Valor |
+|---|---------|-------|
+| 1 | Repositório | `/Users/leandrogrocha/Documents/DEV/ranking-pro-shark` |
+| 2 | Stack | HTML estático + JS vanilla + Supabase REST |
+| 3 | Supabase | **Projeto novo do zero** (NÃO reutilizar `pyywdhjstvhmarvzijji`) |
+| 4 | Pagamento | **Asaas** — direção Semana 4; esta task **não** integra gateway |
+
+**Dúvida de escopo → parar e chamar Supervisor. Não improvisar.**
+
+---
+
+## Fase 0 — Bootstrap do repo (fazer primeiro)
+
+### 0.1 Criar repositório limpo
+```bash
+mkdir -p /Users/leandrogrocha/Documents/DEV/ranking-pro-shark
+cd /Users/leandrogrocha/Documents/DEV/ranking-pro-shark
+git init
+```
+
+### 0.2 Estrutura mínima de pastas
+```
+ranking-pro-shark/
+├── index.html              # redirect ou landing mínima (dev only)
+├── config.example.js       # SUPABASE_URL + ANON_KEY (sem secrets no git)
+├── css/
+│   └── ranking-pro.css     # design system enxuto (não copiar proofly-glass inteiro)
+├── js/
+│   ├── api.js              # fetch Supabase REST
+│   ├── qr-service.js       # criar/validar sessão QR
+│   ├── reviews-service.js  # salvar avaliação
+│   └── profile-service.js  # perfil público + agregação nota
+├── qr/
+│   └── index.html          # entrada QR: /qr/?token=XXX
+├── avaliar/
+│   └── index.html          # formulário nota + comentário (só com token válido)
+├── p/
+│   └── index.html          # perfil público: /p/?slug=fulano
+├── sql/
+│   └── 001_nucleo.sql      # schema enxuto + RLS + trigger nota média
+├── devtasks/               # tasks futuras
+└── README.md               # como rodar local + deploy
+```
+
+### 0.3 Git hygiene
+- `.gitignore`: `config.js`, `.env`, `node_modules/`, `.DS_Store`
+- Commit inicial: `chore: shark mode nucleus scaffold`
+- **Proibido** importar zip do backup como subtree ou copiar `cliente.js`, `flow-registry.js`, etc.
+
+### 0.4 Dev local
+- `python3 -m http.server 8765` na raiz
+- `config.js` local (copiar de `config.example.js`)
+
+---
+
+## Fase 1 — Supabase novo (schema enxuto)
+
+Criar projeto Supabase novo. Rodar `sql/001_nucleo.sql` no SQL Editor.
+
+### Tabelas — só estas 4 no núcleo
+
+**1. `professionals`**
+- `id` UUID PK
+- `slug` TEXT UNIQUE NOT NULL (URL pública: `/p/?slug=`)
+- `name` TEXT NOT NULL
+- `specialty` TEXT (opcional no núcleo — pode ser NULL)
+- `avatar_url` TEXT
+- `whatsapp` TEXT (para Página de Reputação Semana 3 — pode NULL agora)
+- `average_rating` NUMERIC(3,2) DEFAULT 0
+- `total_reviews` INTEGER DEFAULT 0
+- `created_at`, `updated_at` TIMESTAMPTZ
+
+**NÃO incluir:** igv_score, salary_expectation, tags arrays, seeking_work, gallery, etc.
+
+**2. `qr_sessions`** (sessão QR — token único por atendimento)
+- `id` UUID PK
+- `professional_id` UUID FK → professionals
+- `token` TEXT UNIQUE NOT NULL (UUID v4 ou nanoid — imprevisível)
+- `expires_at` TIMESTAMPTZ NOT NULL (ex.: NOW() + 2 horas — configurável)
+- `used_at` TIMESTAMPTZ NULL (preencher ao submeter avaliação — token single-use)
+- `created_at` TIMESTAMPTZ
+
+**Regras:**
+- Token expirado → bloqueia avaliação
+- Token já usado (`used_at` NOT NULL) → bloqueia avaliação
+- Sem bypass por auth, query string alternativa ou endpoint paralelo
+
+**3. `reviews`**
+- `id` UUID PK
+- `professional_id` UUID FK NOT NULL
+- `qr_session_id` UUID FK NOT NULL UNIQUE (1 avaliação por sessão QR)
+- `rating` INTEGER CHECK (1–5)
+- `comment` TEXT
+- `is_verified` BOOLEAN DEFAULT TRUE (sempre true neste MVP — só entra via QR)
+- `created_at` TIMESTAMPTZ
+
+**NÃO incluir:** user_id obrigatório, review_type, establishment_id, prof_link_snapshot, hiring — Semana 3+.
+
+**4. `establishments`** — **NÃO criar nesta task.** Dashboard e cadastro são Semana 3–4.
+
+### Função + trigger
+- `recalc_professional_rating(professional_id)` — recalcula `average_rating` e `total_reviews` após INSERT em `reviews`
+- Trigger `AFTER INSERT ON reviews`
+
+### RLS (MVP pragmático)
+- `professionals`: SELECT público (anon) para perfil; INSERT/UPDATE só authenticated ou service_role (seed manual ok no dev)
+- `qr_sessions`: INSERT authenticated (profissional gera); SELECT anon só por token exato via RPC ou policy restrita
+- `reviews`: INSERT anon **somente** se `qr_session` válido — preferir **Edge Function** ou RPC `submit_qr_review(token, rating, comment)` que valida expiração/uso internamente
+
+**Importante:** não deixar INSERT direto em `reviews` sem validação de token. Fraude = produto morto.
+
+### Seed dev (1 profissional de teste)
+- slug: `joao-barbeiro-teste`
+- name: `João Barbeiro (Teste)`
+
+---
+
+## Fase 2 — Rotas e fluxo (3 telas)
+
+### Mapa de URLs
+
+| Rota | Arquivo | Função |
+|------|---------|--------|
+| `/qr/?token=XXX` | `qr/index.html` | Valida token → redirect para avaliar ou erro |
+| `/avaliar/?token=XXX` | `avaliar/index.html` | Form nota (1–5) + comentário |
+| `/p/?slug=joao-barbeiro` | `p/index.html` | Perfil público: nota média + histórico |
+
+### Fluxo feliz (end-to-end)
+
+```
+1. Profissional (dev: botão/seed) gera qr_session → recebe URL com token
+2. Cliente abre URL no celular
+3. Sistema valida: token existe, não expirou, não foi usado
+4. Cliente envia nota + comentário
+5. review persiste; qr_session.used_at = NOW()
+6. Perfil público /p/?slug=... mostra nova avaliação + nota atualizada
+```
+
+### Fluxo de erro (obrigatório — UI clara)
+
+| Caso | Comportamento |
+|------|---------------|
+| Token inexistente | Tela: "QR inválido" — sem formulário |
+| Token expirado | Tela: "Este QR expirou. Peça um novo ao profissional." |
+| Token já usado | Tela: "Esta avaliação já foi registrada." |
+| Submit duplo | Idempotente — segunda tentativa = mensagem já usado |
+
+### Tela de avaliação (`avaliar/index.html`)
+- Nota: 5 estrelas (toque grande — mobile first)
+- Comentário: textarea opcional, máx. 500 chars
+- Botão único: "Enviar avaliação"
+- Sem login, sem cadastro, sem campos extras
+- DNA Apple: espaçamento generoso, tipografia limpa, feedback de sucesso com link pro perfil do profissional
+
+### Perfil público (`p/index.html`)
+- Nome + specialty (se houver)
+- Nota média grande + contagem ("4.8 · 12 avaliações")
+- Lista cronológica: estrelas + comentário + data relativa
+- Empty state: "Ainda sem avaliações verificadas"
+- **Sem:** marketplace, match, botão contratar, IGV, drawer
+
+### Gerador de QR (dev/MVP interno)
+Para Semana 1–2, pode ser página mínima `dev/gerar-qr.html` ou seed script:
+- Seleciona profissional (dropdown do seed)
+- Cria `qr_session` com token + expires_at
+- Mostra QR code (lib leve: ex. `qrcode.js` via CDN) + URL copiável
+- **Não** precisa ser bonito — precisa funcionar em produção
+
+---
+
+## Fase 3 — Deploy produção real
+
+**Critério de "pronto" exige produção, não só localhost.**
+
+### Frontend
+- Deploy estático: Netlify ou Vercel (escolha uma, documentar no README)
+- `config.js` com vars de produção (Supabase prod URL + anon key)
+
+### Supabase
+- Projeto prod = mesmo do dev OU projeto separado staging→prod (documentar qual)
+- RLS testada com anon key real
+
+### Teste obrigatório (checklist manual)
+1. Gerar QR no desktop
+2. Escanear/abrir URL no **celular** (4G, não WiFi localhost)
+3. Avaliar com nota + comentário
+4. Abrir `/p/?slug=...` no celular — avaliação visível
+5. Tentar reabrir mesmo QR — bloqueado
+6. Esperar expiração (ou forçar `expires_at` no banco) — bloqueado
+
+---
+
+## O que NÃO fazer nesta task (sem pena)
+
+- Cadastro profissional/estabelecimento (Semana 3)
+- Busca especialidade + cidade (Semana 3)
+- Página de Reputação completa com WhatsApp/bio (Semana 3)
+- Dashboard estabelecimento (Semana 4)
+- Asaas / assinatura (Semana 4)
+- Auth Supabase completo / multi-perfil / profile-selector
+- Copiar qualquer arquivo do MVP antigo
+- Importar schema de 15 tabelas do backup
+- Match, IA, marketplace, IGV, CRM, chat, agendamento
+- Avaliação sem QR
+- "Já que estamos aqui, bora adicionar..."
+
+---
+
+## Referências (só leitura — não copiar código)
+
+| Recurso | Path |
+|---------|------|
+| Backup manifest | `/Users/leandrogrocha/Desktop/Ranking-Pro-BACKUP-27JUN2026/BACKUP-MANIFEST.md` |
+| Schema completo (extrair ideias, não importar) | `Ranking-Pro-DATABASE-27JUN2026.sql` |
+| Fluxo QR antigo (conceito) | MVP: `index-qr.js`, `reviews-service.js` |
+| Blueprint Shark | `DEVSYSTEM/agent-prompts/ProjectBluePrint.txt` |
+| Prioridades Magrão | `/Users/leandrogrocha/Desktop/MAGRAO-PRIORIDADES-Ranking-Pro.txt` |
+
+**Conhecimento a reaproveitar do MVP (lógica, não arquivos):**
+- Token único por sessão de atendimento
+- QR inválido/expirado/usado = hard block
+- `is_verified = true` implícito quando veio de QR
+- Perfil público = nota agregada + histórico (sem login)
+
+---
+
+## Ordem de implementação (sequencial — não pular)
+
+1. [ ] Repo + estrutura + README + git init
+2. [ ] Supabase novo + `001_nucleo.sql` + seed 1 profissional
+3. [ ] `api.js` + `qr-service.js` — criar e validar sessão
+4. [ ] `avaliar/index.html` + submit via RPC/Edge Function
+5. [ ] `reviews-service.js` + trigger recalc nota
+6. [ ] `p/index.html` — perfil público
+7. [ ] `dev/gerar-qr.html` — gerar QR para teste
+8. [ ] Deploy frontend + teste celular 4G (checklist completo)
+9. [ ] Commit: `feat: nucleus qr-review-public-profile`
+
+**Nada da Semana 3 começa até todos os itens abaixo estarem ✓.**
+
+---
+
+## Critérios de aceite (Definition of Done — núcleo)
+
+- [ ] Repo em `/Users/leandrogrocha/Documents/DEV/ranking-pro-shark` com git limpo
+- [ ] Supabase **novo** — máximo 4 tabelas no schema do núcleo
+- [ ] QR gera token de sessão único com `expires_at`
+- [ ] QR expirado → bloqueia avaliação (UI + backend)
+- [ ] QR já usado → bloqueia avaliação (UI + backend)
+- [ ] Cliente avalia (nota + comentário) **somente** com QR válido
+- [ ] Avaliação persiste e aparece no perfil público
+- [ ] Perfil mostra nota média + histórico de avaliações
+- [ ] Testado em **produção real** (deploy + celular, não só localhost)
+- [ ] Zero features fora do escopo congelado foram adicionadas
+- [ ] README documenta: rodar local, deploy, variáveis, teste manual
+
+---
+
+## Entrega ao Supervisor
+
+Quando terminar, reportar:
+1. URL de produção (frontend)
+2. URL do Supabase project (só nome/id, não secrets)
+3. Slug do profissional de teste
+4. Print ou confirmação do teste celular 4G
+5. Link do commit `feat: nucleus qr-review-public-profile`
+
+**Se qualquer critério de aceite falhar → não avançar para Semana 3.**
+
+---
+
+*Delegado pelo Supervisor — 27/06/2026*
